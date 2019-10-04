@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next gemini use-motion" lang="zh-Hans">
+<head><meta name="generator" content="Hexo 3.9.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.2" rel="stylesheet" type="text/css">
+
+
+  <meta name="keywords" content="Linux,Select,共享内存,命名管道,信号,">
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.2">
+
+
+
+
+
+
+<meta name="description" content="问题模型 A、B两个进程通过管道通信，A 进程每次接收到的数据通过共享内存传递给A1进程显示，同理，B进程每次接收到的数据通过共享内存传递给B1进程显示； 对于A、B 进程，采用ctrl+c（实际为SIGINT信号）方式退出，A、B进程通过捕捉SIGINT信号注册信号处理函数进行资源清理，A1、B1进程手动关闭即可。  特别注意 A、B通过管道通信，如果首先通过ctrl+c退出A进程，那么B进程的">
+<meta name="keywords" content="Linux,Select,共享内存,命名管道,信号">
+<meta property="og:type" content="article">
+<meta property="og:title" content="基于共享内存、信号、命名管道和Select模型实现聊天窗口">
+<meta property="og:url" content="https://elixirfee.github.io/IO多路复用模型/ipc-chat/index.html">
+<meta property="og:site_name" content="Free Studio">
+<meta property="og:description" content="问题模型 A、B两个进程通过管道通信，A 进程每次接收到的数据通过共享内存传递给A1进程显示，同理，B进程每次接收到的数据通过共享内存传递给B1进程显示； 对于A、B 进程，采用ctrl+c（实际为SIGINT信号）方式退出，A、B进程通过捕捉SIGINT信号注册信号处理函数进行资源清理，A1、B1进程手动关闭即可。  特别注意 A、B通过管道通信，如果首先通过ctrl+c退出A进程，那么B进程的">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="https://elixirfee.github.io/IO多路复用模型/ipc-chat/ipc-chat/windows.png">
+<meta property="og:image" content="https://elixirfee.github.io/IO多路复用模型/ipc-chat/ipc-chat/ret.png">
+<meta property="og:image" content="https://elixirfee.github.io/IO多路复用模型/ipc-chat/ipc-chat/ipcs.png">
+<meta property="og:updated_time" content="2019-08-11T15:47:02.340Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="基于共享内存、信号、命名管道和Select模型实现聊天窗口">
+<meta name="twitter:description" content="问题模型 A、B两个进程通过管道通信，A 进程每次接收到的数据通过共享内存传递给A1进程显示，同理，B进程每次接收到的数据通过共享内存传递给B1进程显示； 对于A、B 进程，采用ctrl+c（实际为SIGINT信号）方式退出，A、B进程通过捕捉SIGINT信号注册信号处理函数进行资源清理，A1、B1进程手动关闭即可。  特别注意 A、B通过管道通信，如果首先通过ctrl+c退出A进程，那么B进程的">
+<meta name="twitter:image" content="https://elixirfee.github.io/IO多路复用模型/ipc-chat/ipc-chat/windows.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Gemini',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="https://elixirfee.github.io/IO多路复用模型/ipc-chat/">
+
+
+
+
+
+  <title>基于共享内存、信号、命名管道和Select模型实现聊天窗口 | Free Studio</title>
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Free Studio</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br>
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br>
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br>
+            
+            关于
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://elixirfee.github.io/IO多路复用模型/ipc-chat/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Elixirfee">
+      <meta itemprop="description" content>
+      <meta itemprop="image" content="/images/avatar.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Free Studio">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">基于共享内存、信号、命名管道和Select模型实现聊天窗口</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2019-04-18T00:16:06+00:00">
+                2019-04-18
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/IPC/" itemprop="url" rel="index">
+                    <span itemprop="name">IPC</span>
+                  </a>
+                </span>
+
+                
+                
+                  ， 
+                
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/同步机制/" itemprop="url" rel="index">
+                    <span itemprop="name">同步机制</span>
+                  </a>
+                </span>
+
+                
+                
+                  ， 
+                
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/IO多路复用模型/" itemprop="url" rel="index">
+                    <span itemprop="name">IO多路复用模型</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h3 id="问题模型"><a href="#问题模型" class="headerlink" title="问题模型"></a>问题模型</h3><ol>
+<li>A、B两个进程通过管道通信，A 进程每次接收到的数据通过共享内存传递给A1进程显示，同理，B进程每次接收到的数据通过共享内存传递给B1进程显示；</li>
+<li>对于A、B 进程，采用ctrl+c（实际为SIGINT信号）方式退出，A、B进程通过捕捉SIGINT信号注册信号处理函数进行资源清理，A1、B1进程手动关闭即可。<br><img src="ipc-chat/windows.png" alt="聊天窗口模型"></li>
+</ol>
+<h3 id="特别注意"><a href="#特别注意" class="headerlink" title="特别注意"></a>特别注意</h3><ol>
+<li>A、B通过管道通信，如果首先通过ctrl+c退出A进程，那么B进程的fifo1管道的写端会收到SIGPIPE信号而终止B进程，因此必须在B进程终止前清理掉被B占用的共享内存2，将共享内存2的引用计数减一，否则，当B1进程退出并清理共享内存2后，共享内存2的引用计数不为0，会导致共享内存2得不到释放；</li>
+<li>为了解决前一个问题，A、B进程在启动后立即将各自的进程id通过管道发送给对方，并在各自的进程退出时向对方进程id发送SIGINT信号，触发对方进程进入信号处理接口执行资源回收工作；</li>
+<li>A和A1通过共享内存1通信，会从A进程和A1进程的虚拟地址空间分配一段连续的页映射到同一块连续的物理内存页上，这样A、A1两个进程都可以间接访问物理内存页，从而达到通信的目的，一般共享内存需要进行保护，读写不能同时进行，也不能同时进行写操作，共享内存省去了从内核缓冲区到用户缓冲区的拷贝，因此效率高。</li>
+</ol>
+<h3 id="编码与效果图"><a href="#编码与效果图" class="headerlink" title="编码与效果图"></a>编码与效果图</h3><p><img src="ipc-chat/ret.png" alt="运行结果"></p>
+<p>func.h:</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#include &lt;stdio.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/types.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;fcntl.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/stat.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;unistd.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;errno.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;strings.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;string.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/select.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/time.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;stdlib.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/wait.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/types.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/ipc.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/shm.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;netinet/in.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;stdio.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/socket.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;arpa/inet.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;string.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;netdb.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/types.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/select.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/time.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;unistd.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/uio.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/stat.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;fcntl.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;unistd.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/ipc.h&gt;</span></span><br><span class="line"><span class="comment">#include &lt;sys/shm.h&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>processA.cpp：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#include "func.h"</span></span><br><span class="line"></span><br><span class="line">int shmid;</span><br><span class="line">int pidB;	// 存放对端进程B的进程id号</span><br><span class="line">char *p;	// 共享内存指针</span><br><span class="line"></span><br><span class="line">// 回收共享内存资源前先杀死对端进程，否则回收失败</span><br><span class="line">void handle(int num)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="built_in">kill</span>(pidB, SIGINT);</span><br><span class="line">	shmdt(p);</span><br><span class="line">	int ret;</span><br><span class="line">	<span class="keyword">if</span>(-1 == (ret=shmctl(shmid, IPC_RMID, NULL))) </span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmctl"</span>);</span><br><span class="line">		<span class="built_in">return</span> (void)-1;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="built_in">exit</span>(0);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">int main(int argc, char **argv)</span><br><span class="line">&#123;</span><br><span class="line">	signal(SIGINT, handle);</span><br><span class="line">	<span class="keyword">if</span>(-1 == (shmid=shmget(1234, 4096, IPC_CREAT|0666)))  </span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmget"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">if</span>((char*)-1 == (p=(char*)shmat(shmid, NULL, 0)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmat"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	// 管道文件为单工通信方式，因此需要建立两条管道</span><br><span class="line">	// A进程通过管道文件fifo1的读端fdr读取B进程发送的数据</span><br><span class="line">	// A进程通过管道文件fifo2的写端fdw向B进程发送数据</span><br><span class="line">	int fdr, fdw;</span><br><span class="line">	<span class="keyword">if</span>(-1 == (fdr=open(<span class="string">"fifo1"</span>, O_RDONLY)) || -1 == (fdw=open(<span class="string">"fifo2"</span>, O_WRONLY)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"open fifo1 or open fifo2"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	// 通信之前先通过管道互相告知对方自己的进程id</span><br><span class="line">	char s1[10] = &#123;0&#125;;</span><br><span class="line">	char s2[10] = &#123;0&#125;;</span><br><span class="line">	sprintf(s1, <span class="string">"%d\n"</span>, getpid());</span><br><span class="line">	write(fdw, s1, strlen(s1) - 1);</span><br><span class="line">	<span class="built_in">read</span>(fdr, s2, strlen(s1) - 1);</span><br><span class="line">	pidB = atoi(s2);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">"pipe connect success, A to A1 shmid:[%d], pidA:[%d], pidB:[%d]\n"</span>, shmid, getpid(), pidB);</span><br><span class="line">	</span><br><span class="line">	char buf[1024] = &#123;0&#125;;</span><br><span class="line">	int ret;</span><br><span class="line">	fd_set rdset;</span><br><span class="line">	<span class="keyword">while</span>(<span class="literal">true</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		FD_ZERO(&amp;rdset);</span><br><span class="line">		FD_SET(0, &amp;rdset);</span><br><span class="line">		FD_SET(fdr, &amp;rdset);</span><br><span class="line">		<span class="keyword">if</span>((ret=select(fdr+1, &amp;rdset, NULL, NULL, NULL) &gt; 0))</span><br><span class="line">		&#123;</span><br><span class="line">			// fdr可读,则接收数据之后通过共享内存传给A1</span><br><span class="line">			<span class="keyword">if</span>(FD_ISSET(fdr, &amp;rdset))</span><br><span class="line">			&#123;</span><br><span class="line">				bzero(buf, sizeof(buf));</span><br><span class="line">				<span class="keyword">if</span>(<span class="built_in">read</span>(fdr, buf, sizeof(buf)) &gt; 0)</span><br><span class="line">				&#123;</span><br><span class="line">					strncpy(p, buf, sizeof(buf));</span><br><span class="line">				&#125;</span><br><span class="line">				<span class="keyword">else</span></span><br><span class="line">				&#123;</span><br><span class="line">					<span class="built_in">break</span>;</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">			</span><br><span class="line">			// 标准输入可读,读出来传递给B进程</span><br><span class="line">			<span class="keyword">if</span>(FD_ISSET(0, &amp;rdset))</span><br><span class="line">			&#123;</span><br><span class="line">				bzero(buf, sizeof(buf));</span><br><span class="line">				<span class="keyword">if</span>(<span class="built_in">read</span>(STDIN_FILENO, buf, sizeof(buf)) &gt; 0)</span><br><span class="line">				&#123;</span><br><span class="line">					write(fdw, buf, strlen(buf) - 1);</span><br><span class="line">				&#125;</span><br><span class="line">				<span class="keyword">else</span></span><br><span class="line">				&#123;</span><br><span class="line">					<span class="built_in">break</span>;</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	close(fdr);</span><br><span class="line">	close(fdw);</span><br><span class="line">	<span class="built_in">return</span> 0;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>processB.cpp：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#include "func.h"</span></span><br><span class="line"></span><br><span class="line">int shmid;</span><br><span class="line">int pidA;	// 存放对端进程id</span><br><span class="line">char *p;	// 共享内存指针</span><br><span class="line"></span><br><span class="line">// 回收共享内存资源前先杀死对端进程，否则回收失败</span><br><span class="line">void handle(int num)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="built_in">kill</span>(pidA, SIGINT);</span><br><span class="line">	shmdt(p);</span><br><span class="line">	int ret;</span><br><span class="line">	<span class="keyword">if</span>(-1 == (ret=shmctl(shmid, IPC_RMID, NULL))) </span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmctl"</span>);</span><br><span class="line">		<span class="built_in">return</span> (void)-1;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="built_in">exit</span>(0);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">int main(int argc, char **argv)</span><br><span class="line">&#123;</span><br><span class="line">	signal(SIGINT, handle);</span><br><span class="line">	<span class="keyword">if</span>(-1 == (shmid=shmget(1235, 4096, IPC_CREAT|0666)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmget"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">if</span>((char*)-1 == (p=(char*)shmat(shmid, NULL, 0)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmat"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	// 管道文件为单工通信方式</span><br><span class="line">	// B进程通过管道文件fifo1的写端fdw向A进程发送数据</span><br><span class="line">	// B进程通过管道文件fifo2的读端fdr接收A进程的数据</span><br><span class="line">	int fdr, fdw;</span><br><span class="line">	<span class="keyword">if</span>(-1 == (fdw=open(<span class="string">"fifo1"</span>, O_WRONLY)) || -1 == (fdr=open(<span class="string">"fifo2"</span>, O_RDONLY)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"open fifo1 or open fifo2"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	// 通信之前先通过管道互相告知对方自己的进程id</span><br><span class="line">	char s1[10] = &#123;0&#125;;</span><br><span class="line">	char s2[10] = &#123;0&#125;;</span><br><span class="line">	sprintf(s1, <span class="string">"%d\n"</span>, getpid());</span><br><span class="line">	write(fdw, s1, strlen(s1) - 1);</span><br><span class="line">	<span class="built_in">read</span>(fdr, s2, strlen(s1) - 1);</span><br><span class="line">	pidA = atoi(s2);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">"pipe connect success, B to B1 shmid:[%d], pidA:[%d], pidB:[%d]\n"</span>, shmid, pidA, getpid());</span><br><span class="line">	</span><br><span class="line">	char buf[1024] = &#123;0&#125;;</span><br><span class="line">	int ret;</span><br><span class="line">	fd_set rdset;</span><br><span class="line">	<span class="keyword">while</span>(<span class="literal">true</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		FD_ZERO(&amp;rdset);</span><br><span class="line">		FD_SET(0, &amp;rdset);</span><br><span class="line">		FD_SET(fdr, &amp;rdset);</span><br><span class="line">		<span class="keyword">if</span>((ret=select(fdr+1, &amp;rdset, NULL, NULL, NULL) &gt; 0))</span><br><span class="line">		&#123;</span><br><span class="line">			// fdr可读,则接收数据之后通过共享内存传给B1</span><br><span class="line">			<span class="keyword">if</span>(FD_ISSET(fdr, &amp;rdset))</span><br><span class="line">			&#123;</span><br><span class="line">				bzero(buf, sizeof(buf));</span><br><span class="line">				<span class="keyword">if</span>(<span class="built_in">read</span>(fdr, buf, sizeof(buf)) &gt; 0)</span><br><span class="line">				&#123;</span><br><span class="line">					strncpy(p, buf, sizeof(buf));</span><br><span class="line">				&#125;</span><br><span class="line">				<span class="keyword">else</span></span><br><span class="line">				&#123;</span><br><span class="line">					<span class="built_in">break</span>;</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">			</span><br><span class="line">			// 标注输入可读,读出来传递给A进程</span><br><span class="line">			<span class="keyword">if</span>(FD_ISSET(0, &amp;rdset))</span><br><span class="line">			&#123;</span><br><span class="line">				bzero(buf, sizeof(buf));</span><br><span class="line">				<span class="keyword">if</span>(<span class="built_in">read</span>(STDIN_FILENO, buf, sizeof(buf)) &gt; 0)</span><br><span class="line">				&#123;</span><br><span class="line">					write(fdw, buf, strlen(buf) - 1);</span><br><span class="line">				&#125;</span><br><span class="line">				<span class="keyword">else</span></span><br><span class="line">				&#123;</span><br><span class="line">					<span class="built_in">break</span>;</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	close(fdr);</span><br><span class="line">	close(fdw);</span><br><span class="line">	<span class="built_in">return</span> 0;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>processA1.cpp：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#include "func.h"</span></span><br><span class="line"></span><br><span class="line">int main(void)</span><br><span class="line">&#123;</span><br><span class="line">	char buf[1024] = &#123;0&#125;;</span><br><span class="line">	int shmid;</span><br><span class="line">	<span class="keyword">if</span>(-1 == (shmid=shmget(1234, 4096, IPC_CREAT|0666)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmget"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	char *p;</span><br><span class="line">	<span class="keyword">if</span>((char*)-1 == (p=(char*)shmat(shmid, NULL, 0)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmat"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">while</span>(<span class="literal">true</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		<span class="keyword">if</span>(!(strcmp(buf, p)))</span><br><span class="line">		&#123;</span><br><span class="line">			<span class="built_in">continue</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">		&#123;</span><br><span class="line">			// 共享内存有数据可读</span><br><span class="line">			bzero(buf, sizeof(buf));</span><br><span class="line">			strcpy(buf, p);</span><br><span class="line">			<span class="built_in">printf</span>(<span class="string">"I am A1, recv from A:[%s]\n"</span>, buf);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">if</span>(-1 ==(shmctl(shmid, IPC_RMID, 0)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmctl"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="built_in">return</span> 0;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>processB1.cpp：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#include "func.h"</span></span><br><span class="line"></span><br><span class="line">int main(void)</span><br><span class="line">&#123;</span><br><span class="line">	char buf[1024] = &#123;0&#125;;</span><br><span class="line">	int shmid;</span><br><span class="line">	<span class="keyword">if</span>(-1 == (shmid=shmget(1235, 4096, IPC_CREAT|0666)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmget"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	char *p;</span><br><span class="line">	<span class="keyword">if</span>((char*)-1 == (p=(char*)shmat(shmid, NULL, 0)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmat"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">while</span>(<span class="literal">true</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		<span class="keyword">if</span>(!(strcmp(buf, p)))</span><br><span class="line">		&#123;</span><br><span class="line">			<span class="built_in">continue</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">		&#123;</span><br><span class="line">			// 共享内存有数据可读</span><br><span class="line">			bzero(buf, sizeof(buf));</span><br><span class="line">			strcpy(buf, p);</span><br><span class="line">			<span class="built_in">printf</span>(<span class="string">"I am B1, recv from B:[%s]\n"</span>, buf);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">if</span>(-1 ==(shmctl(shmid, IPC_RMID, 0)))</span><br><span class="line">	&#123;</span><br><span class="line">		perror(<span class="string">"shmctl"</span>);</span><br><span class="line">		<span class="built_in">return</span> -1;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="built_in">return</span> 0;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="回收资源"><a href="#回收资源" class="headerlink" title="回收资源"></a>回收资源</h3><ol>
+<li>这里首先通过ctrl+c退出A进程，然后B进程收到SIGPIPE信号退出，A、B进程同时调用各自的信号处理函数回收资源，通过ipcs命令发现拥有者为root的共享内存资源的nattch都为1，分别被A1和B1占有。</li>
+<li>然后手动关闭A1、B1进程，再次执行ipcs命令，发现拥有者为root的共享内存资源不存在，已经释放成功。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ ipcs  <span class="comment"># 查看共性内存资源数量</span></span><br></pre></td></tr></table></figure>
+
+</li>
+</ol>
+<p><img src="ipc-chat/ipcs.png" alt="资源回收图"></p>
+<h3 id="源码获取"><a href="#源码获取" class="headerlink" title="源码获取"></a>源码获取</h3><p>本文所有<a href="https://github.com/icoty/Linux/tree/master/IPC/chat" target="_blank" rel="noopener">源码链接</a></p>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+      <div>
+        <ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者：</strong>
+    Elixirfee
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://elixirfee.github.io/IO多路复用模型/ipc-chat/" title="基于共享内存、信号、命名管道和Select模型实现聊天窗口">https://elixirfee.github.io/IO多路复用模型/ipc-chat/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>
+    本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" rel="external nofollow" target="_blank">CC BY-NC-SA 3.0</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+
+      </div>
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/Select/" rel="tag"># Select</a>
+          
+            <a href="/tags/共享内存/" rel="tag"># 共享内存</a>
+          
+            <a href="/tags/命名管道/" rel="tag"># 命名管道</a>
+          
+            <a href="/tags/信号/" rel="tag"># 信号</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/linux/hello-world/" rel="prev" title="Hello World">
+                Hello World <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  <div>
+    
+    <div>
+    
+        <div style="text-align:center;color: #C33;font-size:14px;">------------# 本文结束 #------------</div>
+    
+</div>
+    
+ </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image" src="/images/avatar.jpg" alt="Elixirfee">
+          <p class="site-author-name" itemprop="name">Elixirfee</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives/">
+                <span class="site-state-item-count">2</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-categories">
+              <a href="/categories/index.html">
+                <span class="site-state-item-count">7</span>
+                <span class="site-state-item-name">分类</span>
+              </a>
+            </div>
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">8</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#问题模型"><span class="nav-number">1.</span> <span class="nav-text">问题模型</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#特别注意"><span class="nav-number">2.</span> <span class="nav-text">特别注意</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#编码与效果图"><span class="nav-number">3.</span> <span class="nav-text">编码与效果图</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#回收资源"><span class="nav-number">4.</span> <span class="nav-text">回收资源</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#源码获取"><span class="nav-number">5.</span> <span class="nav-text">源码获取</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-star"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Elixirfee</span>
+</div>
+
+
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.2"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.2"></script>
+
+
+
+  
+  
+
+
+  <script type="text/javascript" src="/js/src/affix.js?v=5.1.2"></script>
+
+  <script type="text/javascript" src="/js/src/schemes/pisces.js?v=5.1.2"></script>
+
+
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.2"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.2"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.2"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
